@@ -1,0 +1,16 @@
+import React, { useEffect, useState } from 'react';
+import { ExternalLink, Loader2 } from 'lucide-react';
+
+export function PublicPublishDialog({Dialog,api,close,onPublished}) {
+  const [plan,setPlan]=useState(null),[error,setError]=useState(''),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[result,setResult]=useState(null);
+  async function loadPlan(){setLoading(true);setError('');try{setPlan(await api('publish-plan'));}catch(e){setError(e.message);}finally{setLoading(false);}}
+  useEffect(()=>{loadPlan();},[]);
+  async function connect(){setBusy(true);setError('');try{const connected=await api('connect',{});onPublished(connected);await loadPlan();}catch(e){setError(e.message);}finally{setBusy(false);}}
+  async function publish(){setBusy(true);setError('');try{const published=await api('publish',{token:plan.token});setResult(published);onPublished(published);}catch(e){setError(e.message);}finally{setBusy(false);}}
+  const files=(plan?.files||[]).map(item=>typeof item==='string'?{path:item,action:'首次发布'}:item);
+  return <Dialog title="发布公开笔记" close={()=>{if(!busy)close();}}>
+    {loading?<p className="muted">正在整理公开笔记清单…</p>:result?<><p>{result.message}</p><a className="repository-link" href={result.repositoryUrl} target="_blank" rel="noreferrer">打开公开笔记仓库 <ExternalLink size={14}/></a></>:plan&&!plan.publishEnabled?<><p>公开笔记可以继续保存在本机。需要发布时，请先在启动设置中配置自己的公开 GitHub 仓库地址（NOTES_PUBLIC_REPOSITORY）。</p><p className="publish-notice">当前安装没有设置公开发布目标，因此不会连接或上传到其他人的仓库。</p></>:plan&&!plan.connected?<><p>{plan.staleConnection?<>检测到旧连接 <code>{plan.previousRepositoryUrl}</code>，当前目标是 <code>{plan.repositoryName}</code>。重新连接时旧镜像和发布记录会在本机改名保留。</>:'先在 GitHub 创建一个空的公开仓库，然后 Notes 才能连接并发布这份公开笔记。'}</p>{!plan.staleConnection&&<div className="publish-steps"><ol><li>打开 GitHub 新建仓库。</li><li>创建仓库：<code>{plan.repositoryName}</code>。</li><li>选择 <strong>Public</strong>，默认分支设为 <code>main</code>。</li><li>保持仓库为空：不要勾选 README、.gitignore 或 License 初始化。</li></ol></div>}{!plan.staleConnection&&<a className="repository-link" href="https://github.com/new" target="_blank" rel="noreferrer">前往创建仓库 <ExternalLink size={14}/></a>}<p className="publish-notice">连接目标：<code>{plan.repository}</code>。连接需要本机已配置 GitHub SSH 凭据；上传前会先展示完整文件清单。</p></>:plan&&<><p>确认后，只会把以下<strong>公开笔记工作区</strong>内的文件推送到 <code>{plan.repositoryName}</code>。</p><a className="repository-link" href={plan.repositoryUrl} target="_blank" rel="noreferrer">打开公开仓库 <ExternalLink size={14}/></a><div className="publish-files">{files.length?files.map(file=><div className="public-file-row" key={file.path}><span>{file.action}</span><code>{file.path}</code></div>):<p className="muted">没有需要发布的文件改动</p>}</div>{plan.ahead>0&&<p>还会推送 {plan.ahead} 个本地提交。</p>}<p className="publish-notice">仓库公开后，任何人都能读取和复制其中的内容。请确认清单中没有私人笔记、隐私资料或凭据。</p></>}
+    {error&&<p className="form-error">{error}</p>}
+    <div className="dialog-footer"><button className="secondary" disabled={busy} onClick={close}>{result?'完成':'取消'}</button>{!result&&plan?.publishEnabled&&!loading&&(!plan.connected?<button className="primary" disabled={busy} onClick={connect}>{busy?'正在连接…':'仓库已创建，连接 GitHub'}</button>:<button className="primary" disabled={busy||!plan.token||(!files.length&&!plan.ahead)} onClick={publish}>{busy?'正在发布…':'确认发布'}</button>)}</div>
+  </Dialog>;
+}

@@ -1,0 +1,9 @@
+{
+  "name": "personal-notes-web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node start.mjs",
+    "build": "npm --prefix app run build"
+  }
+}

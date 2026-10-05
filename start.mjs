@@ -1,0 +1,13 @@
+import os from 'node:os';
+import path from 'node:path';
+import {fileURLToPath} from 'node:url';
+const projectRoot=path.dirname(fileURLToPath(import.meta.url));
+process.env.NOTES_ROOT ||= projectRoot;
+process.env.NOTES_DATA_ROOT ||= path.join(os.homedir(),'NotesData');
+process.env.NOTES_PUBLIC_REPOSITORY ??= '';
+const {createApp}=await import('./app/server.mjs');
+const app=await createApp();
+const port=Number(process.env.PORT||4317);
+const server=app.listen(port,'127.0.0.1');
+server.on('listening',()=>console.log(`Notes is ready at http://127.0.0.1:${port}`));
+server.on('error',error=>{console.error(error.code==='EADDRINUSE'?`端口 ${port} 已被占用，请选择其他 PORT。`:error.message);process.exitCode=1;});
