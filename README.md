@@ -20,6 +20,8 @@ npm start
 
 第一次使用时，程序会在你的用户目录创建 `NotesData/notes/`、`NotesData/assets/` 和回收站目录。应用升级或重新克隆代码不会覆盖这些个人数据。可设置环境变量 `NOTES_DATA_ROOT` 将数据存到其他位置；也可设置 `PORT` 更换本地端口。
 
+本仓库中的 `app/` 是网页端和本地服务端源码；`notes/`、`assets/` 与 `examples/` 只放适合公开的笔记、附件和示例。安装后的私人笔记和附件保存在数据目录中，不随程序代码更新。
+
 ## 使用
 
 - 在左侧新建 Markdown 笔记和文件夹；笔记会自动保存。
@@ -42,6 +44,7 @@ npm start
 - `app/`：网页界面和本地服务端
 - `examples/`：Markdown 与图片示例
 - `start.mjs`：设置安全的本地数据目录并启动服务
+- `docs/ARCHITECTURE.md`：源码职责、运行数据和发布边界
 - `app/dist/`：随项目发布的初始前端资源；运行 `npm run build` 可重新生成
 
 本项目以 Markdown 文件作为笔记数据，不需要数据库或云服务。
