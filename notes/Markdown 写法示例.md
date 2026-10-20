@@ -1,6 +1,8 @@
 ---
 title: Markdown 写法示例
-tags: [Markdown, 示例]
+tags:
+  - Markdown
+  - 示例
 ---
 # Markdown 写法示例
 
@@ -12,7 +14,7 @@ tags: [Markdown, 示例]
 
 ## 待办事项
 
-- [x] 阅读示例
+- [X] 阅读示例
 - [ ] 写下第一篇公开笔记
 
 ## 代码
@@ -33,3 +35,4 @@ console.log(message);
 ## 图片
 
 ![公开笔记示意图](../assets/笔记示意图.svg)
+

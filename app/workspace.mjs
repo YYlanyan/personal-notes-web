@@ -166,6 +166,34 @@ async function createRouter() {
     await fs.writeFile(path.join(folder, '.gitkeep'), '');
     return { ok:true };
   })));
+  app.post('/api/folder/move', async (req,res) => res.json(await exclusive(async () => {
+    if(isBlog) throw fail('博客文章保持现有网址路径，暂不支持移动文件夹。');
+    const { from, to } = req.body;
+    if(typeof from!=='string'||typeof to!=='string'||!from||!to) throw fail('文件夹路径无效');
+    if(from===to)return {ok:true};
+    if(to.startsWith(from+'/')) throw fail('不能把文件夹移动到自身或其子文件夹中');
+    const source=await safe(notes,from),target=await safe(notes,to);
+    const sourceStat=await fs.stat(source).catch(()=>null);
+    if(!sourceStat?.isDirectory()) throw fail('文件夹不存在',404);
+    try { await fs.access(target); throw fail('目标位置已存在同名文件夹',409); } catch(e) { if(e.code!=='ENOENT') throw e; }
+    const all=await index(),mapPath=relative=>relative===from||relative.startsWith(from+'/')?to+relative.slice(from.length):relative;
+    const updates=[];
+    for(const page of all.pages){
+      if(page.error) throw fail('存在无法解析的笔记，请先修复：'+page.path);
+      const nextBody=page.body.split(/(```[\s\S]*?```|`[^`]*`)/g).map((chunk,i)=>i%2?chunk:chunk.replace(/\[\[([^\]\n]+)\]\]/g,(allLink,value)=>{
+        const {path:destination,anchor,label}=parseNoteLink(value),resolved=resolveLink(destination,all.pages,page.path);
+        if(!resolved)return allLink;
+        const moved=mapPath(resolved.path),sourceMoved=mapPath(page.path)!==page.path;
+        if(moved===resolved.path&&!sourceMoved)return allLink;
+        return `[[${withoutExt(moved)}${anchor?'#'+anchor:''}${label?'|'+label:''}]]`;
+      })).join('');
+      if(nextBody!==page.body)updates.push({oldPath:page.path,newPath:mapPath(page.path),raw:matter.stringify(nextBody,page.meta),original:page.body});
+    }
+    for(const update of updates)await backup(update.oldPath,await fs.readFile(await safe(notes,update.oldPath,true),'utf8'));
+    await fs.rename(source,target);
+    for(const update of updates)await atomic(await safe(notes,update.newPath,true),update.raw);
+    return {ok:true};
+  })));
   app.post('/api/move', async (req,res) => res.json(await exclusive(async () => {
     if(isBlog) throw fail('博客文章保持现有网址路径，请通过文章标题修改显示名称。');
     const { from, to } = req.body;
