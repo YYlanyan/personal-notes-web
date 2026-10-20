@@ -40,8 +40,8 @@ export default function Editor({ note, mode, theme, onChange, onError, editorRef
             for(const file of files) {
               if(file.size>10*1024*1024) throw new Error('图片请小于 10 MB');
               const data = await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result.split(',')[1]);r.onerror=reject;r.readAsDataURL(file);});
-              const result=await api('upload',{data,mime:file.type,path:note.path},'POST',workspace);
-              if(!disposed) { editor.insertMD(`![${file.name.replace(/[\[\]\\\n]/g,'')}](${result.url})\n`);live.current.onChange(editor.getValue()); }
+              const result=await api('upload',{data,mime:file.type,path:note.path,name:file.name},'POST',workspace);
+              if(!disposed) { const markdown=`![${file.name.replace(/[\[\]\\\n]/g,'')}](${result.url})`;editor.insertMD(markdown+'\n');live.current.onChange(editor.getValue());navigator.clipboard?.writeText(markdown).catch(()=>{}); }
             }
             return null;
           } catch(e){live.current.onError(e.message);return e.message;}

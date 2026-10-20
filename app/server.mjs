@@ -14,11 +14,12 @@ export async function createApp({dev=false}={}) {
   let settings={};
   try{settings=JSON.parse(await fs.readFile(path.join(dataRoot,'.local/workspaces.json'),'utf8'));}catch{}
   const blogRoot=process.env.NOTES_BLOG_ROOT || settings.blogRoot;
+  const imgbedConfigPath=path.join(dataRoot,'.local/imgbed.json');
   const workspaces=[{id:'notes',name:'私人笔记',root,contentDir:'notes',kind:'notes',available:true}];
   let blogRouter;
   if(blogRoot) {
     try {
-      blogRouter=await createWorkspace({root:path.resolve(blogRoot),localDir:path.join(dataRoot,'.local/blog'),isBlog:true});
+      blogRouter=await createWorkspace({root:path.resolve(blogRoot),localDir:path.join(dataRoot,'.local/blog'),isBlog:true,imgbedConfigPath});
       workspaces.push({id:'blog',name:'博客',root:blogRoot,contentDir:'content',kind:'hugo',available:true,siteUrl:'https://yylanyan.github.io/',repositoryUrl:'https://github.com/YYlanyan/YYlanyan.github.io'});
     } catch(error) {workspaces.push({id:'blog',name:'博客',available:false,error:error.message});}
   }
@@ -26,7 +27,7 @@ export async function createApp({dev=false}={}) {
   let publicRouter;
   try {
     await seedPublicWorkspace(publicDirectory,publicState);
-    publicRouter=await createWorkspace({root:publicRepo,notesDir:publicNotes,assetsDir:path.join(publicDirectory,'assets'),localDir:publicState,isPublic:true});
+    publicRouter=await createWorkspace({root:publicRepo,notesDir:publicNotes,assetsDir:path.join(publicDirectory,'assets'),localDir:publicState,isPublic:true,imgbedConfigPath});
     workspaces.push({id:'public',name:'公开笔记',root:publicDirectory,contentDir:publicNotes,kind:'public-notes',available:true,repositoryUrl:'https://github.com/YYlanyan/personal-notes-web'});
   } catch(error) {workspaces.push({id:'public',name:'公开笔记',available:false,error:error.message});}
   app.get('/api/workspaces',(req,res)=>{
@@ -35,7 +36,7 @@ export async function createApp({dev=false}={}) {
   });
   if(blogRouter)app.use('/workspaces/blog',blogRouter);
   if(publicRouter)app.use('/workspaces/public',publicRouter);
-  app.use(await createWorkspace({root:dataRoot,localDir:path.join(dataRoot,'.local')}));
+  app.use(await createWorkspace({root:dataRoot,localDir:path.join(dataRoot,'.local'),imgbedConfigPath}));
   app.use('/vendor/vditor',express.static(path.join(here,'node_modules/vditor')));
   if(dev){const {createServer}=await import('vite');const vite=await createServer({root:here,server:{middlewareMode:true},appType:'spa'});app.use(vite.middlewares);}
   else{app.use(express.static(path.join(here,'dist')));app.get('/{*any}',(req,res)=>res.sendFile(path.join(here,'dist/index.html')));}

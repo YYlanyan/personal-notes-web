@@ -11,10 +11,11 @@ import { attachPublicRoutes } from './public.mjs';
 import { resolveLink, withoutExt, parseNoteLink } from './src/model.js';
 
 const exec = promisify(execFile);
-export async function createWorkspace({root,localDir,isBlog=false,isPublic=false,notesDir=null,assetsDir=null}) {
+export async function createWorkspace({root,localDir,isBlog=false,isPublic=false,notesDir=null,assetsDir=null,imgbedConfigPath=null}) {
 const notes = notesDir || path.join(root, isBlog ? 'content' : 'notes');
 const assets = assetsDir || path.join(root, 'assets');
 const local = localDir;
+const imgbedConfig = imgbedConfigPath || path.join(local, 'imgbed.json');
 const sha = s => crypto.createHash('sha256').update(s).digest('hex');
 const fail = (message, status = 400) => Object.assign(new Error(message), { status });
 let queue = Promise.resolve();
@@ -263,6 +264,7 @@ async function createRouter() {
     await safe(notes, relative, true);
     const bytes = Buffer.from(data, 'base64');
     if(bytes.length > 10 * 1024 * 1024) throw fail('图片请小于 10 MB');
+    let localUrl;
     if(isBlog) {
       const bundle=path.posix.basename(relative)==='index.md';
       if(req.body.cover&&!bundle)throw fail('封面需要 index.md 文章目录，请为新文章使用默认目录格式。');
@@ -278,13 +280,77 @@ async function createRouter() {
         }
       }
       await atomic(file,bytes);
-      return {url:name};
+      localUrl=name;
+    } else {
+      const name = sha(bytes).slice(0,24) + '.' + ext;
+      if(isPublic) {
+        const backupDir=path.join(local,'image-backups');
+        await fs.mkdir(backupDir,{recursive:true});
+        await atomic(path.join(backupDir,name),bytes);
+        localUrl='.local/public-notes/state/image-backups/'+name;
+      } else {
+        const file = await safe(assets,name);
+        await atomic(file,bytes);
+        localUrl=path.posix.relative(path.posix.join('notes',path.posix.dirname(relative)), 'assets/' + name);
+      }
     }
-    const name = sha(bytes).slice(0,24) + '.' + ext;
-    const file = await safe(assets,name);
-    await atomic(file,bytes);
-    return { url:isPublic?path.posix.relative(path.posix.dirname(path.posix.join('notes',relative)),'assets/'+name):path.posix.relative(path.posix.join('notes',path.posix.dirname(relative)), 'assets/' + name) };
+    let imgbed;
+    try { imgbed=JSON.parse(await fs.readFile(imgbedConfig,'utf8')); } catch { throw fail(`本机备份已保存（${localUrl}），但 ImgBed 尚未配置；设置地址与 Token 后重试上传。`,502); }
+    if(typeof imgbed.endpoint!=='string'||typeof imgbed.token!=='string'||!imgbed.endpoint||!imgbed.token)throw fail(`本机备份已保存（${localUrl}），但 ImgBed 配置不完整；请检查设置后重试上传。`,502);
+    const uploadFolder=String(req.body.uploadFolder??imgbed.uploadFolder??'').trim();
+    if(uploadFolder&&(uploadFolder.startsWith('/')||uploadFolder.includes('\\')||uploadFolder.split('/').some(part=>!part||part==='.'||part==='..'||part.startsWith('.'))))throw fail(`本机备份已保存（${localUrl}），但 ImgBed 服务器文件夹路径无效；请使用如 images/2026 的相对路径。`);
+    const form=new FormData();
+    const filename=typeof req.body.name==='string'?path.basename(req.body.name).replace(/[\x00-\x1f\x7f]/g,'').slice(0,180):'';
+    form.append('file',new Blob([bytes],{type:mime}),filename||path.basename(relative).replace(/\.md$/i,'')+'.'+ext);
+    let response;
+    const uploadUrl=new URL('/upload',imgbed.endpoint);uploadUrl.searchParams.set('returnFormat','full');if(uploadFolder)uploadUrl.searchParams.set('uploadFolder',uploadFolder);
+    try { response=await fetch(uploadUrl,{method:'POST',headers:{Authorization:`Bearer ${imgbed.token}`},body:form,signal:AbortSignal.timeout(60000)}); }
+    catch { throw fail(`本机备份已保存（${localUrl}），连接 ImgBed 失败；请检查网络后重试上传。`,502); }
+    const raw=await response.text();
+    let payload;try{payload=JSON.parse(raw);}catch{payload=null;}
+    if(!response.ok)throw fail(`本机备份已保存（${localUrl}），ImgBed 上传失败（HTTP ${response.status}）；请检查 Token 或服务状态后重试。`,502);
+    const uploaded=Array.isArray(payload)?payload[0]:payload;
+    let url=uploaded?.publicUrl||uploaded?.src||uploaded?.url;
+    if(typeof url!=='string'&&typeof payload==='string')url=payload;
+    if(typeof url!=='string'||!url)throw fail(`本机备份已保存（${localUrl}），但 ImgBed 返回内容无法识别；请检查服务版本后重试。`,502);
+    if(!/^https?:\/\//i.test(url))url=new URL(url,imgbed.endpoint).href;
+    return {url,localUrl};
   })));
+  app.get('/api/imgbed/settings',async(req,res)=>{
+    let config={};try{config=JSON.parse(await fs.readFile(imgbedConfig,'utf8'));}catch{}
+    res.json({endpoint:config.endpoint||'',uploadFolder:config.uploadFolder||'',configured:Boolean(config.endpoint&&config.token)});
+  });
+  app.put('/api/imgbed/settings',async(req,res)=>{
+    const endpoint=String(req.body.endpoint||'').trim().replace(/\/+$/,'');
+    const token=String(req.body.token||'').trim();
+    const uploadFolder=String(req.body.uploadFolder??'').trim();
+    let parsed;try{parsed=new URL(endpoint);}catch{throw fail('ImgBed 地址无效。');}
+    if(!['https:','http:'].includes(parsed.protocol)||parsed.username||parsed.password||parsed.search||parsed.hash)throw fail('ImgBed 地址请填写不带路径、查询参数或凭据的 HTTP(S) 站点地址。');
+    if(uploadFolder&&(uploadFolder.startsWith('/')||uploadFolder.includes('\\')||uploadFolder.split('/').some(part=>!part||part==='.'||part==='..'||part.startsWith('.'))))throw fail('服务器文件夹请使用相对路径，例如 images/2026；不要以斜线开头或使用 . 开头的路径段。');
+    let previous={};try{previous=JSON.parse(await fs.readFile(imgbedConfig,'utf8'));}catch{}
+    if(!token&&!previous.token)throw fail('请填写 ImgBed API Token。');
+    await atomic(imgbedConfig,JSON.stringify({endpoint,token:token||previous.token,uploadFolder},null,2)+'\n');
+    res.json({endpoint,uploadFolder,configured:true});
+  });
+  app.get('/api/imgbed/files',async(req,res)=>{
+    let config={};try{config=JSON.parse(await fs.readFile(imgbedConfig,'utf8'));}catch{}
+    if(typeof config.endpoint!=='string'||typeof config.token!=='string'||!config.endpoint||!config.token)throw fail('请先配置 ImgBed 地址和 API Token。');
+    const start=Number.parseInt(req.query.start,10);
+    if(!Number.isInteger(start)||start<0)throw fail('服务器图片列表页码无效。');
+    const listUrl=new URL('/api/manage/list',config.endpoint);
+    listUrl.searchParams.set('start',String(start));
+    listUrl.searchParams.set('count','100');
+    listUrl.searchParams.set('recursive','true');
+    let response;
+    try{response=await fetch(listUrl,{headers:{Authorization:`Bearer ${config.token}`},signal:AbortSignal.timeout(30000)});}
+    catch{throw fail('连接 ImgBed 读取服务器图片失败，请检查网络或服务地址。',502);}
+    const raw=await response.text();
+    let payload;try{payload=JSON.parse(raw);}catch{payload=null;}
+    if(!response.ok)throw fail(`读取 ImgBed 图片列表失败（HTTP ${response.status}），请检查 Token 或服务状态。`,502);
+    if(!payload||!Array.isArray(payload.files))throw fail('ImgBed 返回的图片列表格式无法识别。',502);
+    res.setHeader('Cache-Control','no-store');
+    res.json({files:payload.files,totalCount:Number(payload.totalCount)||0,returnedCount:Number(payload.returnedCount)||payload.files.length});
+  });
   app.get('/api/git', async (req,res) => res.json(await gitStatus()));
   app.post('/api/sync', async (req,res) => res.json(await exclusive(async () => {
     if(isBlog||isPublic)throw fail(isBlog?'请使用博客发布入口。':'请使用公开笔记发布入口。');

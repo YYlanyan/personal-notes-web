@@ -34,5 +34,5 @@ console.log(message);
 
 ## 图片
 
-![公开笔记示意图](../assets/笔记示意图.svg)
+![公开笔记示意图](https://cloudflare-imgbed-5ty.pages.dev/file/Desktop/1/1792487351736_ChatGPT_Image_2026%E5%B9%B46%E6%9C%889%E6%97%A5_00_44_58.png)
 
