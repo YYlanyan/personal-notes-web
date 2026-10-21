@@ -6,6 +6,14 @@ import { renderNotePreview } from './preview';
 import useOutlineTracking, { outlineOffset, outlineTargets } from './useOutlineTracking';
 
 const escape = s => s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const imageDimensions = file => new Promise((resolve,reject) => {
+  const url = URL.createObjectURL(file);
+  const image = new Image();
+  const cleanup = () => URL.revokeObjectURL(url);
+  image.onload = () => { cleanup(); resolve({width:image.naturalWidth,height:image.naturalHeight}); };
+  image.onerror = () => { cleanup(); reject(new Error('无法读取图片尺寸')); };
+  image.src = url;
+});
 export default function Editor({ note, mode, theme, onChange, onError, editorRef, pages, onNavigate, anchorRequest, onActiveHeadingChange, busy, toolbarHost, workspace='notes' }) {
   const host = useRef(null), toolbar = useRef(null), instance = useRef(null), pinnedHeading = useRef(''), live = useRef({onChange,onError,pages,onNavigate,theme,toolbarHost});
   live.current = {onChange,onError,pages,onNavigate,theme,toolbarHost,onActiveHeadingChange,body:note.body};
@@ -19,7 +27,7 @@ export default function Editor({ note, mode, theme, onChange, onError, editorRef
       cdn:'/vendor/vditor', lang:'zh_CN', mode:'sv',
       cache:{enable:false}, undoDelay:100, value:note.body, height:'auto', minHeight:360,
       placeholder:'写下你的想法…', theme:live.current.theme === 'dark' ? 'dark' : 'classic',
-      toolbar:['headings','bold','italic','strike','|','list','ordered-list','check','quote','|','link','upload','code','inline-code','table','|','undo','redo'],
+      toolbar:['headings','bold','italic','strike','|','list','ordered-list','check','quote','|','link','code','inline-code','table','|','undo','redo'],
       link:{isOpen:false}, toolbarConfig:{pin:false}, counter:{enable:false}, outline:{enable:false},
       preview:{ delay:150, maxWidth:900, mode:mode==='edit'?'editor':'both', markdown:{sanitize:true,linkBase:location.origin+base}, math:{engine:'KaTeX'}, hljs:{enable:true,lineNumber:false,style:'github'}, theme:{current:live.current.theme === 'dark' ? 'dark' : 'light',path:'/vendor/vditor/dist/css/content-theme'}, actions:[],
         transform:html=>renderNotePreview(html,location.origin+base,workspace)
@@ -39,9 +47,10 @@ export default function Editor({ note, mode, theme, onChange, onError, editorRef
           try {
             for(const file of files) {
               if(file.size>10*1024*1024) throw new Error('图片请小于 10 MB');
+              const {width,height}=await imageDimensions(file);
               const data = await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result.split(',')[1]);r.onerror=reject;r.readAsDataURL(file);});
               const result=await api('upload',{data,mime:file.type,path:note.path,name:file.name},'POST',workspace);
-              if(!disposed) { const markdown=`![${file.name.replace(/[\[\]\\\n]/g,'')}](${result.url})`;editor.insertMD(markdown+'\n');live.current.onChange(editor.getValue());navigator.clipboard?.writeText(markdown).catch(()=>{}); }
+              if(!disposed) { const html=`<img src="${escape(result.url)}" alt="${escape(file.name)}" style="width: ${width}px; height: ${height}px;" />`;editor.insertMD(html+'\n');live.current.onChange(editor.getValue()); }
             }
             return null;
           } catch(e){live.current.onError(e.message);return e.message;}
