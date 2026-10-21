@@ -1,10 +1,13 @@
 import os from 'node:os';
 import path from 'node:path';
+import fs from 'node:fs';
 import {fileURLToPath} from 'node:url';
 const projectRoot=path.dirname(fileURLToPath(import.meta.url));
-process.env.NOTES_ROOT ||= projectRoot;
-process.env.NOTES_DATA_ROOT ||= path.join(os.homedir(),'NotesData');
-process.env.NOTES_PUBLIC_REPOSITORY ??= '';
+const workspaceRoot=path.resolve(projectRoot,'..');
+const isIntegratedWorkspace=['.git','notes','assets','public-notes','package.json'].every(name=>fs.existsSync(path.join(workspaceRoot,name)));
+process.env.NOTES_ROOT ||= isIntegratedWorkspace?workspaceRoot:projectRoot;
+process.env.NOTES_DATA_ROOT ||= isIntegratedWorkspace?workspaceRoot:path.join(os.homedir(),'NotesData');
+process.env.NOTES_PUBLIC_REPOSITORY ??= isIntegratedWorkspace?'git@github.com:YYlanyan/personal-notes-web.git':'';
 const {createApp}=await import('./app/server.mjs');
 const app=await createApp({dev:process.argv.includes('--dev')});
 const port=Number(process.env.PORT||4317);

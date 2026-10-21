@@ -30,3 +30,5 @@ body{color:var(--text)}[data-theme=dark] .info-section h3{color:#a7b4aa}[data-th
 @media(max-width:1000px){.imgbed-settings{grid-template-columns:1fr 1fr}}
 @media(max-width:800px){.imgbed-settings{grid-template-columns:1fr}.image-library-page>header{align-items:center}.image-library-page h1{font-size:23px}.uploaded-markdown article{grid-template-columns:1fr}.uploaded-markdown code{max-width:100%}}
 @media(max-width:700px){.server-image-library>header{align-items:flex-start;flex-direction:column}.server-image-actions{width:100%}.server-image-actions input{width:100%;min-width:0}.server-image-grid{grid-template-columns:repeat(auto-fill,minmax(145px,1fr));gap:9px}.server-image-details{padding:9px}}
+.image-return-format{display:flex;align-items:center;justify-content:flex-end;gap:12px;margin:-7px 0 18px;color:var(--muted);font-size:12px}.image-return-format label{display:flex;align-items:center;gap:8px}.image-return-format select{padding:8px 11px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text)}
+@media(max-width:700px){.image-return-format{justify-content:flex-start;flex-wrap:wrap}}

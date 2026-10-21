@@ -1,13 +1,18 @@
 import express from 'express';
 import fs from 'node:fs/promises';
+import {existsSync} from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createWorkspace } from './workspace.mjs';
 import { seedPublicWorkspace } from './public.mjs';
 
 const here=path.dirname(fileURLToPath(import.meta.url));
-export const root=path.resolve(process.env.NOTES_ROOT || path.join(here,'..'));
-export const dataRoot=path.resolve(process.env.NOTES_DATA_ROOT || root);
+const projectRoot=path.resolve(here,'..');
+const integratedRoot=path.resolve(projectRoot,'..');
+const isIntegratedWorkspace=['.git','notes','assets','public-notes','package.json'].every(name=>existsSync(path.join(integratedRoot,name)));
+const defaultRoot=isIntegratedWorkspace?integratedRoot:projectRoot;
+export const root=path.resolve(process.env.NOTES_ROOT || defaultRoot);
+export const dataRoot=path.resolve(process.env.NOTES_DATA_ROOT || (process.env.NOTES_ROOT?root:defaultRoot));
 export async function createApp({dev=false}={}) {
   const app=express();
   app.disable('x-powered-by');
